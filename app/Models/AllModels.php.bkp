@@ -1,0 +1,519 @@
+<?php
+
+namespace App\Models;
+
+use CodeIgniter\Model;
+
+/**
+ * User Model
+ */
+class UserModel extends Model
+{
+    protected $table = 'users';
+    protected $primaryKey = 'id';
+    protected $useAutoIncrement = true;
+    protected $returnType = 'array';
+    protected $useSoftDeletes = false;
+    protected $allowedFields = [
+        'username', 'email', 'password_hash', 'full_name', 'date_of_birth',
+        'gender', 'phone', 'country', 'state', 'city', 'educational_level',
+        'school_name', 'profile_image', 'is_active', 'email_verified', 'last_login'
+    ];
+    protected $useTimestamps = true;
+    protected $createdField = 'created_at';
+    protected $updatedField = 'updated_at';
+    protected $validationRules = [
+        'username' => 'required|min_length[3]|max_length[100]|is_unique[users.username,id,{id}]',
+        'email' => 'required|valid_email|is_unique[users.email,id,{id}]',
+        'full_name' => 'required|min_length[2]',
+        'educational_level' => 'required'
+    ];
+}
+
+/**
+ * User Session Model
+ */
+class UserSessionModel extends Model
+{
+    protected $table = 'user_sessions';
+    protected $primaryKey = 'id';
+    protected $returnType = 'array';
+    protected $allowedFields = [
+        'user_id', 'session_token', 'ip_address', 'user_agent', 'expires_at'
+    ];
+    protected $useTimestamps = true;
+    protected $createdField = 'created_at';
+    protected $updatedField = false;
+
+    public function cleanupExpiredSessions()
+    {
+        return $this->where('expires_at <', date('Y-m-d H:i:s'))->delete();
+    }
+}
+
+/**
+ * Test Category Model
+ */
+class TestCategoryModel extends Model
+{
+    protected $table = 'test_categories';
+    protected $primaryKey = 'id';
+    protected $returnType = 'array';
+    protected $allowedFields = [
+        'category_code', 'category_name', 'description', 'min_age', 'max_age',
+        'duration_minutes', 'total_questions', 'is_active', 'display_order'
+    ];
+    protected $useTimestamps = true;
+
+    public function getActiveCategories()
+    {
+        return $this->where('is_active', true)
+                    ->orderBy('display_order', 'ASC')
+                    ->findAll();
+    }
+
+    public function getCategoryByCode(string $code)
+    {
+        return $this->where('category_code', $code)->first();
+    }
+}
+
+/**
+ * Question Model
+ */
+class QuestionModel extends Model
+{
+    protected $table = 'questions';
+    protected $primaryKey = 'id';
+    protected $returnType = 'array';
+    protected $allowedFields = [
+        'category_id', 'question_text', 'question_type', 'options', 'dimension',
+        'sub_dimension', 'scoring_key', 'reverse_scored', 'weight',
+        'difficulty_level', 'age_group', 'is_active', 'display_order'
+    ];
+    protected $useTimestamps = true;
+
+    public function getQuestionsByCategory(string $categoryCode, string $ageGroup)
+    {
+        $categoryModel = new TestCategoryModel();
+        $category = $categoryModel->getCategoryByCode($categoryCode);
+        
+        if (!$category) {
+            return [];
+        }
+
+        return $this->where('category_id', $category['id'])
+                    ->where('is_active', true)
+                    ->groupStart()
+                        ->where('age_group', $ageGroup)
+                        ->orWhere('age_group', 'both')
+                    ->groupEnd()
+                    ->orderBy('display_order', 'ASC')
+                    ->findAll();
+    }
+
+    public function getQuestionsByAttempt(int $attemptId)
+    {
+        $attemptModel = new TestAttemptModel();
+        $attempt = $attemptModel->find($attemptId);
+        
+        if (!$attempt) {
+            return [];
+        }
+
+        return $this->where('category_id', $attempt['category_id'])
+                    ->where('is_active', true)
+                    ->findAll();
+    }
+}
+
+/**
+ * Assessment Session Model
+ */
+class AssessmentSessionModel extends Model
+{
+    protected $table = 'assessment_sessions';
+    protected $primaryKey = 'id';
+    protected $returnType = 'array';
+    protected $allowedFields = [
+        'user_id', 'session_code', 'age_group', 'status',
+        'started_at', 'completed_at', 'total_duration_seconds',
+        'ip_address', 'user_agent'
+    ];
+    protected $useTimestamps = true;
+
+    public function getUserSessions(int $userId)
+    {
+        return $this->where('user_id', $userId)
+                    ->orderBy('created_at', 'DESC')
+                    ->findAll();
+    }
+
+    public function getActiveSession(int $userId)
+    {
+        return $this->where('user_id', $userId)
+                    ->whereIn('status', ['not_started', 'in_progress'])
+                    ->orderBy('created_at', 'DESC')
+                    ->first();
+    }
+}
+
+/**
+ * Test Attempt Model
+ */
+class TestAttemptModel extends Model
+{
+    protected $table = 'test_attempts';
+    protected $primaryKey = 'id';
+    protected $returnType = 'array';
+    protected $allowedFields = [
+        'session_id', 'category_id', 'status', 'started_at',
+        'completed_at', 'duration_seconds', 'total_questions', 'answered_questions'
+    ];
+    protected $useTimestamps = true;
+
+    public function getSessionAttempts(int $sessionId)
+    {
+        return $this->select('test_attempts.*, test_categories.category_name, test_categories.category_code')
+                    ->join('test_categories', 'test_categories.id = test_attempts.category_id')
+                    ->where('session_id', $sessionId)
+                    ->findAll();
+    }
+}
+
+/**
+ * User Response Model
+ */
+class UserResponseModel extends Model
+{
+    protected $table = 'user_responses';
+    protected $primaryKey = 'id';
+    protected $returnType = 'array';
+    protected $allowedFields = [
+        'attempt_id', 'question_id', 'response_value', 'response_text',
+        'response_json', 'time_taken_seconds', 'is_skipped'
+    ];
+    protected $useTimestamps = false;
+    protected $createdField = 'answered_at';
+
+    public function getAttemptResponses(int $attemptId)
+    {
+        return $this->where('attempt_id', $attemptId)->findAll();
+    }
+
+    public function getResponseCount(int $attemptId, bool $excludeSkipped = true)
+    {
+        $builder = $this->where('attempt_id', $attemptId);
+        
+        if ($excludeSkipped) {
+            $builder->where('is_skipped', false);
+        }
+        
+        return $builder->countAllResults();
+    }
+}
+
+/**
+ * Test Result Model
+ */
+class TestResultModel extends Model
+{
+    protected $table = 'test_results';
+    protected $primaryKey = 'id';
+    protected $returnType = 'array';
+    protected $allowedFields = [
+        'attempt_id', 'category_id', 'user_id', 'raw_scores',
+        'normalized_scores', 'percentile_scores', 'interpretation',
+        'reliability_score', 'completion_percentage'
+    ];
+    protected $useTimestamps = false;
+    protected $createdField = 'calculated_at';
+
+    public function getSessionResults(int $sessionId)
+    {
+        return $this->select('test_results.*, test_categories.category_code, test_categories.category_name')
+                    ->join('test_attempts', 'test_attempts.id = test_results.attempt_id')
+                    ->join('test_categories', 'test_categories.id = test_results.category_id')
+                    ->where('test_attempts.session_id', $sessionId)
+                    ->findAll();
+    }
+
+    public function getUserResults(int $userId)
+    {
+        return $this->where('user_id', $userId)
+                    ->orderBy('calculated_at', 'DESC')
+                    ->findAll();
+    }
+}
+
+/**
+ * Comprehensive Report Model
+ */
+class ComprehensiveReportModel extends Model
+{
+    protected $table = 'comprehensive_reports';
+    protected $primaryKey = 'id';
+    protected $returnType = 'array';
+    protected $allowedFields = [
+        'session_id', 'user_id', 'report_code', 'riasec_profile',
+        'vark_profile', 'mbti_type', 'mbti_scores', 'gardner_profile',
+        'eq_score', 'eq_breakdown', 'aptitude_scores', 'iq_estimate',
+        'personality_analysis', 'career_interests', 'top_career_matches',
+        'learning_style_analysis', 'motivators', 'strengths',
+        'development_areas', 'emotional_competencies', 'recommended_careers',
+        'career_roadmaps', 'educational_pathways', 'skill_development_plan',
+        'confidence_score', 'report_version', 'expires_at'
+    ];
+    protected $useTimestamps = false;
+    protected $createdField = 'generated_at';
+
+    public function getReportByCode(string $code)
+    {
+        return $this->where('report_code', $code)->first();
+    }
+
+    public function getUserReports(int $userId)
+    {
+        return $this->where('user_id', $userId)
+                    ->orderBy('generated_at', 'DESC')
+                    ->findAll();
+    }
+}
+
+/**
+ * Career Model
+ */
+class CareerModel extends Model
+{
+    protected $table = 'careers';
+    protected $primaryKey = 'id';
+    protected $returnType = 'array';
+    protected $allowedFields = [
+        'career_code', 'career_title', 'career_category', 'short_description',
+        'detailed_description', 'day_in_life', 'educational_requirements',
+        'skill_requirements', 'certifications', 'experience_required',
+        'riasec_profile', 'mbti_fit', 'gardner_requirements',
+        'eq_requirements', 'aptitude_requirements', 'salary_range',
+        'job_outlook', 'growth_rate', 'work_environment', 'typical_hours',
+        'physical_demands', 'demand_by_country', 'licensing_requirements',
+        'entry_level_positions', 'mid_level_positions', 'senior_level_positions',
+        'related_careers', 'alternative_careers', 'career_image',
+        'video_url', 'is_active', 'popularity_score'
+    ];
+    protected $useTimestamps = true;
+    protected $createdField = 'created_at';
+    protected $updatedField = 'last_updated';
+
+    public function searchCareers(string $query)
+    {
+        return $this->like('career_title', $query)
+                    ->orLike('short_description', $query)
+                    ->where('is_active', true)
+                    ->findAll();
+    }
+
+    public function getCareersByCategory(string $category)
+    {
+        return $this->where('career_category', $category)
+                    ->where('is_active', true)
+                    ->findAll();
+    }
+}
+
+/**
+ * Career Roadmap Model
+ */
+class CareerRoadmapModel extends Model
+{
+    protected $table = 'career_roadmaps';
+    protected $primaryKey = 'id';
+    protected $returnType = 'array';
+    protected $allowedFields = [
+        'career_id', 'age_group', 'region', 'immediate_steps',
+        'short_term_goals', 'medium_term_goals', 'long_term_goals',
+        'subject_focus', 'exam_preparation', 'extracurricular_activities',
+        'internship_opportunities', 'networking_tips', 'recommended_courses',
+        'online_resources', 'books_and_materials'
+    ];
+    protected $useTimestamps = true;
+
+    public function getRoadmap(int $careerId, string $ageGroup, string $region = 'Global')
+    {
+        return $this->where('career_id', $careerId)
+                    ->where('age_group', $ageGroup)
+                    ->groupStart()
+                        ->where('region', $region)
+                        ->orWhere('region', 'Global')
+                    ->groupEnd()
+                    ->first();
+    }
+}
+
+/**
+ * Psychometric Norm Model
+ */
+class PsychometricNormModel extends Model
+{
+    protected $table = 'psychometric_norms';
+    protected $primaryKey = 'id';
+    protected $returnType = 'array';
+    protected $allowedFields = [
+        'category_code', 'age_group', 'region', 'dimension',
+        'mean_score', 'std_deviation', 'percentile_25',
+        'percentile_50', 'percentile_75', 'percentile_90', 'sample_size'
+    ];
+    protected $useTimestamps = true;
+    protected $updatedField = 'last_updated';
+    protected $createdField = false;
+
+    public function getNorm(string $categoryCode, string $ageGroup, string $dimension, string $region = 'Global')
+    {
+        return $this->where('category_code', $categoryCode)
+                    ->where('age_group', $ageGroup)
+                    ->where('dimension', $dimension)
+                    ->groupStart()
+                        ->where('region', $region)
+                        ->orWhere('region', 'Global')
+                    ->groupEnd()
+                    ->first();
+    }
+}
+
+/**
+ * Career Match Model
+ */
+class CareerMatchModel extends Model
+{
+    protected $table = 'career_matches';
+    protected $primaryKey = 'id';
+    protected $returnType = 'array';
+    protected $allowedFields = [
+        'report_id', 'career_id', 'match_percentage', 'match_breakdown',
+        'fit_explanation', 'why_suitable', 'potential_challenges', 'rank_position'
+    ];
+    protected $useTimestamps = true;
+    protected $createdField = 'created_at';
+    protected $updatedField = false;
+
+    public function getReportMatches(int $reportId, int $limit = 10)
+    {
+        return $this->select('career_matches.*, careers.career_title, careers.career_category')
+                    ->join('careers', 'careers.id = career_matches.career_id')
+                    ->where('report_id', $reportId)
+                    ->orderBy('match_percentage', 'DESC')
+                    ->limit($limit)
+                    ->findAll();
+    }
+}
+
+/**
+ * AI Insights Model
+ */
+class AIInsightModel extends Model
+{
+    protected $table = 'ai_insights';
+    protected $primaryKey = 'id';
+    protected $returnType = 'array';
+    protected $allowedFields = [
+        'report_id', 'insight_type', 'insight_title', 'insight_text', 'priority'
+    ];
+    protected $useTimestamps = true;
+    protected $createdField = 'created_at';
+    protected $updatedField = false;
+
+    public function getReportInsights(int $reportId, string $type = null)
+    {
+        $builder = $this->where('report_id', $reportId);
+        
+        if ($type) {
+            $builder->where('insight_type', $type);
+        }
+        
+        return $builder->orderBy('priority', 'DESC')
+                      ->orderBy('created_at', 'ASC')
+                      ->findAll();
+    }
+}
+
+/**
+ * Audit Log Model
+ */
+class AuditLogModel extends Model
+{
+    protected $table = 'audit_logs';
+    protected $primaryKey = 'id';
+    protected $returnType = 'array';
+    protected $allowedFields = [
+        'user_id', 'action_type', 'table_name', 'record_id',
+        'old_values', 'new_values', 'ip_address', 'user_agent'
+    ];
+    protected $useTimestamps = true;
+    protected $createdField = 'created_at';
+    protected $updatedField = false;
+
+    public function getUserActivity(int $userId, int $limit = 50)
+    {
+        return $this->where('user_id', $userId)
+                    ->orderBy('created_at', 'DESC')
+                    ->limit($limit)
+                    ->findAll();
+    }
+}
+
+/**
+ * System Settings Model
+ */
+class SystemSettingModel extends Model
+{
+    protected $table = 'system_settings';
+    protected $primaryKey = 'id';
+    protected $returnType = 'array';
+    protected $allowedFields = [
+        'setting_key', 'setting_value', 'setting_type', 'description'
+    ];
+    protected $useTimestamps = true;
+    protected $updatedField = 'updated_at';
+    protected $createdField = false;
+
+    public function getSetting(string $key, $default = null)
+    {
+        $setting = $this->where('setting_key', $key)->first();
+        
+        if (!$setting) {
+            return $default;
+        }
+        
+        return $this->castValue($setting['setting_value'], $setting['setting_type']);
+    }
+
+    public function setSetting(string $key, $value, string $type = 'string')
+    {
+        $existing = $this->where('setting_key', $key)->first();
+        
+        $data = [
+            'setting_key' => $key,
+            'setting_value' => is_array($value) ? json_encode($value) : $value,
+            'setting_type' => $type
+        ];
+        
+        if ($existing) {
+            return $this->update($existing['id'], $data);
+        }
+        
+        return $this->insert($data);
+    }
+
+    private function castValue($value, $type)
+    {
+        switch ($type) {
+            case 'integer':
+                return (int) $value;
+            case 'boolean':
+                return filter_var($value, FILTER_VALIDATE_BOOLEAN);
+            case 'json':
+                return json_decode($value, true);
+            default:
+                return $value;
+        }
+    }
+}
