@@ -10,7 +10,7 @@ $routes->get('/', 'Home::index');
 $routes->get('home', 'Home::index');
 $routes->get('about', 'Home::about');
 $routes->get('contact','Home::contact');
-
+$routes->post('contact/submit', 'Home::submitContact');
 
 $routes->get('nep/(:any)', 'Home::viewNep/$1');
 $routes->get('policy/(:any)', 'Home::viewPolicy/$1');

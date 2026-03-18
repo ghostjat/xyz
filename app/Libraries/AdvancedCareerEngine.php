@@ -544,10 +544,15 @@ class AdvancedCareerEngine {
         // The top stream percentage is still the highest of the four, but it is
         // no longer artificially anchored at 100 %.
         // -----------------------------------------------------------------
-        $theoreticalStreamMax = 185;
+        $maxCognitivePoints = (100 + 100) * 0.4;             // 80
+        $maxPersonalityPoints = (100 * 0.5) + (100 * 0.3);   // 80
+        $maxClusterBonus = 25;                               // Tier 1 rank bonus
+        $theoreticalStreamMax = $maxCognitivePoints + $maxPersonalityPoints + $maxClusterBonus; // 185 $theoreticalStreamMax = 185;
+        
         foreach ($streams as $key => &$data) {
             $data['match_percentage'] = min(100, round(($data['score'] / $theoreticalStreamMax) * 100));
         }
+        
         unset($data); 
 
         $output['academic_roadmap'] = $streams;

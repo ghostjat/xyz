@@ -12,10 +12,8 @@
                     Start Your Growth <br> Journey With Us.
                 </h2>
 
-                <p class="mb-5 text-muted" style="font-size: 1.1rem; line-height: 1.6;">
-                    Our counsellors are ready to help you map out your future. 
-                    Reach out directly or schedule a call.
-                </p>
+                    <form id="contactForm" action="<?= base_url('contact/submit') ?>" method="POST">
+                        <?= csrf_field() ?>
 
                 <div class="d-flex align-items-center mb-4">
                     <div class="d-flex align-items-center justify-content-center rounded-circle shadow-sm" 
@@ -79,17 +77,23 @@
                                 <label class="form-label small fw-bold text-muted">PHONE</label>
                                 <input type="text" name="phone" class="form-control p-3 bg-light border-0" placeholder="+91...">
                             </div>
-
+                            
                             <div class="col-md-6">
-                                <label class="form-label small fw-bold text-muted">I AM A...</label>
-                                <select name="role" class="form-select p-3 bg-light border-0">
-                                    <option value="">Select Role</option>
-                                    <option value="Student">Student</option>
-                                    <option value="Parent">Parent</option>
-                                    <option value="School Admin">School Admin</option>
+                                <label for="role" class="form-label fw-bold">I am a...</label>
+                                <select class="form-select" id="role" name="role" required>
+                                    <option value="" disabled selected>Select your role</option>
+                                    <option value="student">Student</option>
+                                    <option value="parent">Parent / Guardian</option>
+                                    <option value="school_admin">School Administrator</option>
+                                    <option value="counselor">Career Counselor</option>
+                                    <option value="other">Other</option>
                                 </select>
                             </div>
-
+                              
+                            <div class="col-12">
+                                <label for="subject" class="form-label fw-bold">Subject</label>
+                                <input type="text" class="form-control" id="subject" name="subject" required>
+                            </div>
                             <div class="col-12">
                                 <label class="form-label small fw-bold text-muted">MESSAGE</label>
                                 <textarea name="message" rows="4" class="form-control p-3 bg-light border-0" placeholder="How can we help you?"></textarea>
@@ -136,6 +140,8 @@
             
             // Clear previous errors
             $('.error-msg').remove();
+            $('.is-invalid').removeClass('is-invalid');
+            
             let btn = $(this).find('button[type="submit"]');
             let originalText = btn.html();
             
@@ -143,13 +149,12 @@
             btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm"></span> Sending...');
 
             $.ajax({
-                url: "<?= base_url('contact-submit') ?>",
+                url: $(this).attr('action'), // Uses the action attribute from the form
                 method: "POST",
-                data: $(this).serialize(),
+                data: $(this).serialize(),   // This automatically grabs the CSRF token from <?= csrf_field() ?>
                 dataType: "json",
                 headers: {
-                    'X-Requested-With': 'XMLHttpRequest',
-                    'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content') // Ensure you have this meta tag!
+                    'X-Requested-With': 'XMLHttpRequest'
                 },
                 success: function(response) {
                     btn.prop('disabled', false).html(originalText);
@@ -159,16 +164,24 @@
                         $('#contactForm')[0].reset();
                         $('#contactForm').slideUp();
                         $('#successMsg').html('<i class="bi bi-check-circle-fill me-2"></i> ' + response.message).fadeIn();
-                    } else {
-                        // Error: Show validation messages
+                    } else if (response.status === 'validation_error') {
+                        // Display granular validation errors
                         $.each(response.errors, function(field, message) {
-                            $('[name="' + field + '"]').after('<div class="text-danger small error-msg mt-1">' + message + '</div>');
+                            let input = $('[name="' + field + '"]');
+                            input.addClass('is-invalid');
+                            input.after('<div class="text-danger small error-msg mt-1">' + message + '</div>');
                         });
+                        // Update CSRF hash if CI4 regeneration is on
+                        if(response.csrf) {
+                            $('input[name="csrf_test_name"]').val(response.csrf);
+                    }
+                    } else {
+                        alert(response.message);
                     }
                 },
                 error: function() {
                     btn.prop('disabled', false).html(originalText);
-                    alert('Something went wrong. Please try again.');
+                    alert('Something went wrong. Please check your network and try again.');
                 }
             });
         });

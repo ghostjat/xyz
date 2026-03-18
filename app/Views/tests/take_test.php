@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
     <head>
-        <title><?= strtoupper(esc($module)) ?> Assessment</title>
+        <title><?= strtoupper(esc($module_desc)) ?> Assessment</title>
         <?= csrf_meta();?>
         <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
@@ -49,7 +49,7 @@
             <div class="card shadow-lg border-0">
                 <div class="card-header bg-dark text-white py-3">
                     <div class="d-flex justify-content-between align-items-center mb-2">
-                        <h4 class="mb-0 fw-bold"><?= strtoupper(esc($module)) ?> Assessment</h4>
+                        <h4 class="mb-0 fw-bold"><?= esc($module_desc) ?> Assessment</h4>
                         <span class="badge bg-warning text-dark fs-6">Step <span id="currStep">1</span> of <?= count(esc($questions)) ?></span>
                     </div>
                     

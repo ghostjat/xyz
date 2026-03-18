@@ -34,9 +34,11 @@ class TestController extends BaseController {
             return view('dashboard');
             
         }
-        $validModules = ['riasec', 'mbti', 'eq', 'aptitude', 'gardner', 'vark','motivators'];
-        
-        if (!in_array($moduleCode, $validModules)) {
+        $validModules = ['riasec' => 'Career Interest','mbti' => 'Personality Type','eq' => 'Emotional Intelligence','gardner' => 'Multiple Intelligences',
+            'aptitude' => 'Professional Aptitude','vark' => 'Learning Styles','motivators' => 'Career Motivators',
+        ];
+
+        if (!array_key_exists($moduleCode, $validModules)) {
             return redirect()->to('dashboard')->with('error', 'Invalid Test Module Requested');
         }
         
@@ -58,6 +60,7 @@ class TestController extends BaseController {
                             ->findAll();
 
         $data = [
+            'module_desc' => $validModules[$moduleCode],
             'module' => $moduleCode,
             'questions' => $questions
         ];
@@ -165,9 +168,31 @@ class TestController extends BaseController {
                     ];
                 }
             }
+            // ---------------------------------------------------------
+            // QA FIX A: Inject the correct age-band norm before scoring
+            // ---------------------------------------------------------
+            $userRecord = $this->db->table('users')->where('id', $userId)->get()->getRow();
+            $gradeBand = 'junior'; // Default to Grades 8-10
+            
+            // Check if user is in a senior bracket
+            if ($userRecord && in_array($userRecord->educational_level, ['class_11', 'class_12', 'graduate', 'postgraduate'])) {
+                $gradeBand = 'senior';
+            }
+            $this->engine->setGradeBand($gradeBand);
 
             // 2. Calculate Result (Scientific Engine)
             $resultData = $this->engine->calculateScore($moduleCode, $processedAnswers);
+            
+            // ---------------------------------------------------------
+            // QA FIX B: Null Pointer Protection
+            // ---------------------------------------------------------
+            if (!$resultData) {
+                $this->db->transRollback(); // Release DB lock
+                return $this->response->setJSON([
+                    'status' => 'error', 
+                    'msg' => 'Calculation failed: Invalid test module or corrupted data.'
+                ]);
+            }
             
             // 3. EXTRACT PRIMARY TRAIT
             // 3. EXTRACT PRIMARY TRAIT
@@ -210,6 +235,7 @@ class TestController extends BaseController {
             ]);
 
         } catch (\Exception $e) {
+            $this->db->transRollback();
             return $this->response->setJSON(['status' => 'error', 'msg' => 'An error occurred during submission: ' . $e->getMessage()]);
         }
     }
